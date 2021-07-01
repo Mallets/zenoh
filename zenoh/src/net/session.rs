@@ -1312,7 +1312,7 @@ impl Primitives for Session {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        source_kind: ZInt,
+        replier_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
         data_info: Option<DataInfo>,
@@ -1321,7 +1321,7 @@ impl Primitives for Session {
         trace!(
             "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
             qid,
-            source_kind,
+            replier_kind,
             replier_id,
             reskey,
             data_info,
@@ -1343,7 +1343,7 @@ impl Primitives for Session {
                         payload,
                         data_info,
                     },
-                    source_kind,
+                    replier_kind,
                     replier_id,
                 };
                 match query.reception_mode {
