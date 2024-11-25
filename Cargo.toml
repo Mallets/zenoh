@@ -192,7 +192,7 @@ z-serial = "0.2.3"
 either = "1.13.0"
 prost = "0.13.2"
 tls-listener = { version = "0.10.2", features = ["rustls-ring"] }
-zenoh-ext = { version = "1.0.0-dev", path = "zenoh-ext" }
+# zenoh-ext = { version = "1.0.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "1.0.0-dev", path = "commons/zenoh-shm" }
 zenoh-result = { version = "1.0.0-dev", path = "commons/zenoh-result", default-features = false }
 zenoh-config = { version = "1.0.0-dev", path = "commons/zenoh-config" }
@@ -220,7 +220,7 @@ zenoh-link-serial = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-s
 zenoh-link-vsock = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-vsock" }
 zenoh-link = { version = "1.0.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "1.0.0-dev", path = "io/zenoh-link-commons" }
-zenoh = { version = "1.0.0-dev", path = "zenoh", default-features = false }
+# zenoh = { version = "1.0.0-dev", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "1.0.0-dev", path = "commons/zenoh-runtime" }
 zenoh-task = { version = "1.0.0-dev", path = "commons/zenoh-task" }
 
