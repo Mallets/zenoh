@@ -61,12 +61,14 @@ impl StageInRefill {
         self.s_ref_r.pull()
     }
 
-    fn wait(&self) -> bool {
-        self.n_ref_r.wait().is_ok()
+    async fn wait(&self) -> bool {
+        self.n_ref_r.wait_async().await.is_ok()
     }
 
-    fn wait_deadline(&self, instant: Instant) -> bool {
-        self.n_ref_r.wait_deadline(instant).is_ok()
+    async fn wait_deadline(&self, instant: Instant) -> bool {
+        tokio::time::timeout_at(instant.into(), self.n_ref_r.wait_async())
+            .await
+            .is_ok()
     }
 }
 
@@ -183,11 +185,11 @@ impl Deadline {
     }
 
     #[inline]
-    fn wait(&mut self, s_ref: &StageInRefill) -> bool {
+    async fn wait(&mut self, s_ref: &StageInRefill) -> bool {
         match self.lazy_deadline.deadline() {
             DeadlineSetting::Immediate => false,
-            DeadlineSetting::Infinite => s_ref.wait(),
-            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
+            DeadlineSetting::Infinite => s_ref.wait().await,
+            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant).await,
         }
     }
 
@@ -232,7 +234,7 @@ impl StageIn {
                             None => {
                                 drop(c_guard);
                                 // Wait for an available batch until deadline
-                                if !deadline.wait(&self.s_ref) {
+                                if !deadline.wait(&self.s_ref).await {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
@@ -381,7 +383,7 @@ impl StageIn {
                             }
                             None => {
                                 drop(c_guard);
-                                if !self.s_ref.wait() {
+                                if !self.s_ref.wait().await {
                                     return false;
                                 }
                                 c_guard = self.mutex.current().await;
