@@ -35,7 +35,7 @@ use crate::common::{
 /*************************************/
 //noinspection ALL
 impl TransportMulticastInner {
-    fn trigger_callback(
+    async fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessage,
@@ -51,7 +51,7 @@ impl TransportMulticastInner {
             }
         }
 
-        peer.handler.handle_message(msg)
+        peer.handler.handle_message(msg).await
     }
 
     pub(super) fn handle_join_from_peer(
@@ -171,7 +171,7 @@ impl TransportMulticastInner {
             return Ok(());
         }
         for msg in payload.drain(..) {
-            self.trigger_callback(msg, peer)?;
+            self.trigger_callback(msg, peer).await?;
         }
 
         Ok(())
@@ -224,7 +224,7 @@ impl TransportMulticastInner {
         if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
             if let Some(msg) = guard.defrag.defragment() {
-                return self.trigger_callback(msg, peer);
+                return self.trigger_callback(msg, peer).await;
             } else {
                 tracing::trace!(
                     "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",

@@ -35,7 +35,7 @@ use crate::{
 /*            TRANSPORT RX           */
 /*************************************/
 impl TransportUnicastUniversal {
-    fn trigger_callback(
+    async fn trigger_callback(
         &self,
         callback: &dyn TransportPeerEventHandler,
         #[allow(unused_mut)] // shared-memory feature requires mut
@@ -50,7 +50,7 @@ impl TransportUnicastUniversal {
                 }
             }
         }
-        callback.handle_message(msg)
+        callback.handle_message(msg).await
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
@@ -103,7 +103,7 @@ impl TransportUnicastUniversal {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
             for msg in payload.drain(..) {
-                self.trigger_callback(callback.as_ref(), msg)?;
+                self.trigger_callback(callback.as_ref(), msg).await?;
             }
         } else {
             tracing::debug!(
@@ -159,7 +159,7 @@ impl TransportUnicastUniversal {
             if let Some(msg) = guard.defrag.defragment() {
                 let callback = zread!(self.callback).clone();
                 if let Some(callback) = callback.as_ref() {
-                    return self.trigger_callback(callback.as_ref(), msg);
+                    return self.trigger_callback(callback.as_ref(), msg).await;
                 } else {
                     tracing::debug!(
                         "Transport: {}. No callback available, dropping messages: {:?}",

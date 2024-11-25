@@ -13,6 +13,7 @@
 //
 use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use zenoh_core::ztimeout;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
@@ -56,8 +57,9 @@ impl TransportEventHandler for SH {
 #[derive(Default)]
 pub struct SC;
 
+#[async_trait]
 impl TransportPeerEventHandler for SC {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
     fn new_link(&self, _link: Link) {}

@@ -22,6 +22,7 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -116,8 +117,9 @@ impl SCRouter {
     }
 }
 
+#[async_trait]
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
         match &message.body {
             NetworkBody::Push(p) => {
                 assert_eq!(
@@ -175,8 +177,9 @@ impl Default for SCClient {
     }
 }
 
+#[async_trait]
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

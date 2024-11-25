@@ -22,6 +22,7 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -130,8 +131,9 @@ impl SCClient {
     }
 }
 
+#[async_trait]
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         self.counter.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }

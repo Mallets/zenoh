@@ -13,6 +13,7 @@
 //
 use std::{any::Any, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -64,8 +65,9 @@ impl MHRouterAuthenticator {
     }
 }
 
+#[async_trait]
 impl TransportPeerEventHandler for MHRouterAuthenticator {
-    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
     fn new_link(&self, _link: Link) {}

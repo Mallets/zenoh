@@ -27,7 +27,7 @@ use super::transport::TransportUnicastLowlatency;
 /*            TRANSPORT RX           */
 /*************************************/
 impl TransportUnicastLowlatency {
-    fn trigger_callback(
+    async fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessage,
@@ -43,7 +43,7 @@ impl TransportUnicastLowlatency {
                     }
                 }
             }
-            callback.handle_message(msg)
+            callback.handle_message(msg).await
         } else {
             tracing::debug!(
                 "Transport: {}. No callback available, dropping message: {}",
@@ -79,7 +79,7 @@ impl TransportUnicastLowlatency {
                 }
                 zenoh_protocol::transport::TransportBodyLowLatency::KeepAlive(_) => {}
                 zenoh_protocol::transport::TransportBodyLowLatency::Network(msg) => {
-                    let _ = self.trigger_callback(msg);
+                    let _ = self.trigger_callback(msg).await;
                 }
             }
         }

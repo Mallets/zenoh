@@ -24,6 +24,7 @@ mod tests {
         time::Duration,
     };
 
+    use async_trait::async_trait;
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -102,8 +103,9 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl TransportPeerEventHandler for SCRouter {
-        fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+        async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -142,8 +144,9 @@ mod tests {
     #[derive(Default)]
     pub struct SCClient;
 
+    #[async_trait]
     impl TransportPeerEventHandler for SCClient {
-        fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+        async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
             Ok(())
         }
 
@@ -303,7 +306,7 @@ mod tests {
         }
         .into();
         for _ in 0..MSG_COUNT {
-            let _ = client_transport.schedule(message.clone());
+            let _ = client_transport.schedule(message.clone()).await;
         }
 
         match channel.reliability {

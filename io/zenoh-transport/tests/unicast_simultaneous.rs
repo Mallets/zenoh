@@ -23,6 +23,7 @@ mod tests {
         time::Duration,
     };
 
+    use async_trait::async_trait;
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -90,11 +91,14 @@ mod tests {
             }
             .into();
 
-            println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
-            for _ in 0..MSG_COUNT {
-                transport.schedule(message.clone()).await.unwrap();
-            }
-            println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
+            let zid = self.zid;
+            zenoh_runtime::ZRuntime::Net.spawn(async move {
+                println!("[Simultaneous {}] Sending {}...", zid, MSG_COUNT);
+                for _ in 0..MSG_COUNT {
+                    transport.schedule(message.clone()).await.unwrap();
+                }
+                println!("[Simultaneous {}] ... sent {}", zid, MSG_COUNT);
+            });
 
             let mh = Arc::new(MHPeer::new(self.count.clone()));
             Ok(mh)
@@ -118,8 +122,9 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl TransportPeerEventHandler for MHPeer {
-        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+        async fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::AcqRel);
             Ok(())
         }

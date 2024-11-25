@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
@@ -90,8 +91,9 @@ impl MHPeer {
     }
 }
 
+#[async_trait]
 impl TransportPeerEventHandler for MHPeer {
-    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }

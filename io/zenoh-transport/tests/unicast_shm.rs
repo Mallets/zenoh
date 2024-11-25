@@ -23,6 +23,7 @@ mod tests {
         time::Duration,
     };
 
+    use async_trait::async_trait;
     use zenoh_buffers::buffer::SplitBuffer;
     use zenoh_core::{ztimeout, Wait};
     use zenoh_link::Link;
@@ -104,8 +105,9 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+        async fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
             } else {

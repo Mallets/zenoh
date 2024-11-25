@@ -22,6 +22,7 @@ pub mod manager;
 pub mod multicast;
 pub mod unicast;
 
+use async_trait::async_trait;
 #[cfg(feature = "stats")]
 pub use common::stats;
 
@@ -115,8 +116,9 @@ pub struct TransportPeer {
     pub is_shm: bool,
 }
 
+#[async_trait]
 pub trait TransportPeerEventHandler: Send + Sync {
-    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()>;
+    async fn handle_message(&self, msg: NetworkMessage) -> ZResult<()>;
     fn new_link(&self, src: Link);
     fn del_link(&self, link: Link);
     fn closed(&self);
@@ -127,8 +129,9 @@ pub trait TransportPeerEventHandler: Send + Sync {
 #[derive(Default)]
 pub struct DummyTransportPeerEventHandler;
 
+#[async_trait]
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

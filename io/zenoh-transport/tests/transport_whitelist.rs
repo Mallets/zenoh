@@ -13,6 +13,7 @@
 //
 use std::{any::Any, convert::TryFrom, iter::FromIterator, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -51,8 +52,9 @@ impl TransportEventHandler for SHRouter {
 
 pub struct SCRouter;
 
+#[async_trait]
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    async fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

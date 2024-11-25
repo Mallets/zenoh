@@ -26,6 +26,7 @@ mod tests {
         time::Duration,
     };
 
+    use async_trait::async_trait;
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -117,8 +118,9 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+        async fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
