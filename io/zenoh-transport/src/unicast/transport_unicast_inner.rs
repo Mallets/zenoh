@@ -84,7 +84,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
+    async fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
 
     /*************************************/
     /*            TERMINATION            */

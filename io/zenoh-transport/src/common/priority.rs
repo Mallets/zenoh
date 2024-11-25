@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::{Arc, Mutex};
-
-use zenoh_core::zlock;
+use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
+use zenoh_core::zasynclock;
 use zenoh_protocol::{
     core::{Bits, Reliability},
     transport::{PrioritySn, TransportSn},
@@ -76,8 +76,8 @@ impl TransportChannelRx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportPriorityTx {
-    pub(crate) reliable: Arc<Mutex<TransportChannelTx>>,
-    pub(crate) best_effort: Arc<Mutex<TransportChannelTx>>,
+    pub(crate) reliable: Arc<AsyncMutex<TransportChannelTx>>,
+    pub(crate) best_effort: Arc<AsyncMutex<TransportChannelTx>>,
 }
 
 impl TransportPriorityTx {
@@ -85,22 +85,22 @@ impl TransportPriorityTx {
         let rch = TransportChannelTx::make(resolution)?;
         let bch = TransportChannelTx::make(resolution)?;
         let ctx = TransportPriorityTx {
-            reliable: Arc::new(Mutex::new(rch)),
-            best_effort: Arc::new(Mutex::new(bch)),
+            reliable: Arc::new(AsyncMutex::new(rch)),
+            best_effort: Arc::new(AsyncMutex::new(bch)),
         };
         Ok(ctx)
     }
 
-    pub(crate) fn sync(&self, sn: PrioritySn) -> ZResult<()> {
-        zlock!(self.reliable).sync(sn.reliable)?;
-        zlock!(self.best_effort).sync(sn.best_effort)
+    pub(crate) async fn sync(&self, sn: PrioritySn) -> ZResult<()> {
+        zasynclock!(self.reliable).sync(sn.reliable)?;
+        zasynclock!(self.best_effort).sync(sn.best_effort)
     }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportPriorityRx {
-    pub(crate) reliable: Arc<Mutex<TransportChannelRx>>,
-    pub(crate) best_effort: Arc<Mutex<TransportChannelRx>>,
+    pub(crate) reliable: Arc<AsyncMutex<TransportChannelRx>>,
+    pub(crate) best_effort: Arc<AsyncMutex<TransportChannelRx>>,
 }
 
 impl TransportPriorityRx {
@@ -108,14 +108,14 @@ impl TransportPriorityRx {
         let rch = TransportChannelRx::make(Reliability::Reliable, resolution, defrag_buff_size)?;
         let bch = TransportChannelRx::make(Reliability::BestEffort, resolution, defrag_buff_size)?;
         let ctr = TransportPriorityRx {
-            reliable: Arc::new(Mutex::new(rch)),
-            best_effort: Arc::new(Mutex::new(bch)),
+            reliable: Arc::new(AsyncMutex::new(rch)),
+            best_effort: Arc::new(AsyncMutex::new(bch)),
         };
         Ok(ctr)
     }
 
-    pub(crate) fn sync(&self, sn: PrioritySn) -> ZResult<()> {
-        zlock!(self.reliable).sync(sn.reliable)?;
-        zlock!(self.best_effort).sync(sn.best_effort)
+    pub(crate) async fn sync(&self, sn: PrioritySn) -> ZResult<()> {
+        zasynclock!(self.reliable).sync(sn.reliable)?;
+        zasynclock!(self.best_effort).sync(sn.best_effort)
     }
 }

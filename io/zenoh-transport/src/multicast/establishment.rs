@@ -80,10 +80,10 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         is_shm: manager.config.multicast.is_shm,
     };
-    let ti = Arc::new(TransportMulticastInner::make(manager.clone(), config)?);
+    let ti = Arc::new(TransportMulticastInner::make(manager.clone(), config).await?);
 
     // Add the link
-    ti.start_tx()?;
+    ti.start_tx().await?;
 
     // Store the active transport
     let mut w_guard = zasynclock!(manager.state.multicast.transports);
@@ -101,14 +101,14 @@ pub(crate) async fn open_link(
         Ok(c) => c,
         Err(e) => {
             zasynclock!(manager.state.multicast.transports).remove(&locator);
-            let _ = ti.stop_tx();
+            let _ = ti.stop_tx().await;
             return Err(e);
         }
     };
-    ti.set_callback(callback);
-    if let Err(e) = ti.start_rx() {
+    ti.set_callback(callback).await;
+    if let Err(e) = ti.start_rx().await {
         zasynclock!(manager.state.multicast.transports).remove(&locator);
-        let _ = ti.stop_rx();
+        let _ = ti.stop_rx().await;
         return Err(e);
     }
 

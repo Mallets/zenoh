@@ -27,7 +27,7 @@ impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
+    pub(crate) async fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {

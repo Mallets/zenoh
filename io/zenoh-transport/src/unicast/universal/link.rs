@@ -161,7 +161,7 @@ impl TransportLinkUnicastUniversal {
 
         self.tracker.close();
         self.token.cancel();
-        self.pipeline.disable();
+        self.pipeline.disable().await;
         self.tracker.wait().await;
 
         self.link.close(None).await
@@ -220,7 +220,7 @@ async fn tx_task(
     }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
-    let mut batches = pipeline.drain();
+    let mut batches = pipeline.drain().await;
     for (mut b, _) in batches.drain(..) {
         tokio::time::timeout(keep_alive, link.send_batch(&mut b))
             .await
@@ -281,7 +281,7 @@ async fn rx_task(
 
                     transport.stats.inc_rx_bytes(2 + batch.len()); // Account for the batch len encoding (16 bits)
                 }
-                transport.read_messages(batch, &l)?;
+                transport.read_messages(batch, &l).await?;
             }
 
             _ = token.cancelled() => break

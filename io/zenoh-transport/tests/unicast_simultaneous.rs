@@ -92,7 +92,7 @@ mod tests {
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
-                transport.schedule(message.clone()).unwrap();
+                transport.schedule(message.clone()).await.unwrap();
             }
             println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 

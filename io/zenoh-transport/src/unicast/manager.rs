@@ -552,7 +552,7 @@ impl TransportManager {
         } else {
             tracing::debug!("Will use Universal transport!");
             link_error!(
-                TransportUnicastUniversal::make(self.clone(), config.clone()),
+                TransportUnicastUniversal::make(self.clone(), config.clone()).await,
                 close::reason::INVALID
             )
         };

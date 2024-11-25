@@ -27,7 +27,7 @@ pub use manager::{
     TransportManagerParamsMulticast,
 };
 use transport::TransportMulticastInner;
-use zenoh_core::{zcondfeat, zread};
+use zenoh_core::{zasyncread, zcondfeat};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::Bits,
@@ -84,21 +84,21 @@ impl TransportMulticast {
     }
 
     #[inline(always)]
-    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportMulticastEventHandler>>> {
+    pub async fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportMulticastEventHandler>>> {
         let transport = self.get_transport()?;
-        Ok(transport.get_callback())
+        Ok(transport.get_callback().await)
     }
 
     #[inline(always)]
-    pub fn get_link(&self) -> ZResult<Link> {
+    pub async fn get_link(&self) -> ZResult<Link> {
         let transport = self.get_transport()?;
-        Ok(Link::new_multicast(&transport.get_link().link))
+        Ok(Link::new_multicast(&transport.get_link().await.link))
     }
 
     #[inline(always)]
-    pub fn get_peers(&self) -> ZResult<Vec<TransportPeer>> {
+    pub async fn get_peers(&self) -> ZResult<Vec<TransportPeer>> {
         let transport = self.get_transport()?;
-        Ok(transport.get_peers())
+        Ok(transport.get_peers().await)
     }
 
     #[inline(always)]
@@ -111,15 +111,15 @@ impl TransportMulticast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
+    pub async fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_transport()?;
-        transport.schedule(message);
+        transport.schedule(message).await;
         Ok(())
     }
 
     #[inline(always)]
-    pub fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
-        self.schedule(message)
+    pub async fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+        self.schedule(message).await
     }
 
     #[cfg(feature = "stats")]
@@ -147,8 +147,8 @@ impl fmt::Debug for TransportMulticast {
         match self.get_transport() {
             Ok(transport) => {
                 let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
-                let peers: String =
-                    zread!(transport.peers)
+                let peers: String = zenoh_runtime::ZRuntime::Net.block_in_place(async {
+                    zasyncread!(transport.peers)
                         .iter()
                         .fold(String::new(), |mut output, (l, p)| {
                             let _ = write!(
@@ -157,7 +157,8 @@ impl fmt::Debug for TransportMulticast {
                                 l, p.zid, p.whatami
                             );
                             output
-                        });
+                        })
+                });
 
                 f.debug_struct("Transport Multicast")
                     .field("sn_resolution", &transport.get_sn_resolution())

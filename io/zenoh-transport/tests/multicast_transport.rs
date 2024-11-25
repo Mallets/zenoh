@@ -193,7 +193,7 @@ mod tests {
             ztimeout!(peer01_manager.get_transport_multicast(&peer02_id)).unwrap();
         println!(
             "\tPeer01 peers: {:?}",
-            peer01_transport.get_peers().unwrap()
+            peer01_transport.get_peers().await.unwrap()
         );
 
         ztimeout!(async {
@@ -209,7 +209,7 @@ mod tests {
             ztimeout!(peer02_manager.get_transport_multicast(&peer01_id)).unwrap();
         println!(
             "\tPeer02 peers: {:?}",
-            peer02_transport.get_peers().unwrap()
+            peer02_transport.get_peers().await.unwrap()
         );
 
         (
@@ -236,7 +236,7 @@ mod tests {
         ztimeout!(peer01.transport.close()).unwrap();
         assert!(ztimeout!(peer01.manager.get_transports_multicast()).is_empty());
         ztimeout!(async {
-            while !peer02.transport.get_peers().unwrap().is_empty() {
+            while !peer02.transport.get_peers().await.unwrap().is_empty() {
                 tokio::time::sleep(SLEEP_COUNT).await;
             }
         });
@@ -278,7 +278,7 @@ mod tests {
 
         println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
         for _ in 0..MSG_COUNT {
-            peer01.transport.schedule(message.clone()).unwrap();
+            peer01.transport.schedule(message.clone()).await.unwrap();
         }
 
         match channel.reliability {

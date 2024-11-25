@@ -20,7 +20,7 @@ use std::{
 
 use tokio::task::JoinHandle;
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
-use zenoh_core::{zcondfeat, zlock};
+use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohIdProto},
@@ -286,7 +286,10 @@ impl TransportLinkMulticastUniversal {
             .iter()
             .map(|x| PrioritySn {
                 reliable: {
-                    let sn = zlock!(x.reliable).sn.now();
+                    let sn = zenoh_runtime::ZRuntime::Net
+                        .block_in_place(async { zasynclock!(x.reliable) })
+                        .sn
+                        .now();
                     if sn == 0 {
                         config.sn_resolution.mask() as TransportSn
                     } else {
@@ -294,7 +297,10 @@ impl TransportLinkMulticastUniversal {
                     }
                 },
                 best_effort: {
-                    let sn = zlock!(x.best_effort).sn.now();
+                    let sn = zenoh_runtime::ZRuntime::Net
+                        .block_in_place(async { zasynclock!(x.best_effort) })
+                        .sn
+                        .now();
                     if sn == 0 {
                         config.sn_resolution.mask() as TransportSn
                     } else {
@@ -342,9 +348,9 @@ impl TransportLinkMulticastUniversal {
         }
     }
 
-    pub(super) fn stop_tx(&mut self) {
+    pub(super) async fn stop_tx(&mut self) {
         if let Some(pipeline) = self.pipeline.as_ref() {
-            pipeline.disable();
+            pipeline.disable().await;
         }
     }
 
@@ -391,7 +397,7 @@ impl TransportLinkMulticastUniversal {
             handle_rx.await?;
         }
 
-        self.stop_tx();
+        self.stop_tx().await;
         if let Some(handle) = self.handle_tx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
@@ -446,7 +452,7 @@ async fn tx_task(
                     }
                     None => {
                         // Drain the transmission pipeline and write remaining bytes on the wire
-                        let mut batches = pipeline.drain();
+                        let mut batches = pipeline.drain().await;
                         for (mut b, _) in batches.drain(..) {
                             tokio::time::timeout(config.join_interval, link.send_batch(&mut b))
                                 .await
@@ -561,7 +567,7 @@ async fn rx_task(
                     batch_size,
                     #[cfg(feature = "stats")]
                     &transport,
-                )?;
+                ).await?;
             }
         }
     }

@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
-
-use zenoh_core::{zlock, zread};
+use tokio::sync::MutexGuard as AsyncMutexGuard;
+use zenoh_core::{zasynclock, zread};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
@@ -71,7 +70,7 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_frame(&self, frame: Frame) -> ZResult<()> {
+    async fn handle_frame(&self, frame: Frame) -> ZResult<()> {
         let Frame {
             reliability,
             sn,
@@ -93,8 +92,8 @@ impl TransportUnicastUniversal {
         };
 
         let mut guard = match reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zasynclock!(c.reliable),
+            Reliability::BestEffort => zasynclock!(c.best_effort),
         };
 
         if !self.verify_sn(sn, &mut guard)? {
@@ -117,7 +116,7 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_fragment(&self, fragment: Fragment) -> ZResult<()> {
+    async fn handle_fragment(&self, fragment: Fragment) -> ZResult<()> {
         let Fragment {
             reliability,
             more,
@@ -139,8 +138,8 @@ impl TransportUnicastUniversal {
         };
 
         let mut guard = match reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zasynclock!(c.reliable),
+            Reliability::BestEffort => zasynclock!(c.best_effort),
         };
 
         if !self.verify_sn(sn, &mut guard)? {
@@ -179,7 +178,7 @@ impl TransportUnicastUniversal {
     fn verify_sn(
         &self,
         sn: TransportSn,
-        guard: &mut MutexGuard<'_, TransportChannelRx>,
+        guard: &mut AsyncMutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
         let precedes = guard.sn.roll(sn)?;
         if !precedes {
@@ -195,7 +194,7 @@ impl TransportUnicastUniversal {
         Ok(true)
     }
 
-    pub(super) fn read_messages(&self, mut batch: RBatch, link: &Link) -> ZResult<()> {
+    pub(super) async fn read_messages(&self, mut batch: RBatch, link: &Link) -> ZResult<()> {
         while !batch.is_empty() {
             let msg: TransportMessage = batch
                 .decode()
@@ -209,8 +208,8 @@ impl TransportUnicastUniversal {
             }
 
             match msg.body {
-                TransportBody::Frame(msg) => self.handle_frame(msg)?,
-                TransportBody::Fragment(fragment) => self.handle_fragment(fragment)?,
+                TransportBody::Frame(msg) => self.handle_frame(msg).await?,
+                TransportBody::Fragment(fragment) => self.handle_fragment(fragment).await?,
                 TransportBody::Close(Close { reason, session }) => {
                     self.handle_close(link, reason, session)?
                 }

@@ -128,9 +128,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
+    pub async fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_inner()?;
-        transport.schedule(message)
+        transport.schedule(message).await
     }
 
     #[inline(always)]

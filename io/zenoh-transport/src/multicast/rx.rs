@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
+use tokio::sync::MutexGuard as AsyncMutexGuard;
 
-use zenoh_core::{zlock, zread};
+use zenoh_core::{zasynclock, zasyncread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
     network::NetworkMessage,
@@ -78,13 +78,13 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn handle_join_from_unknown(
+    pub(super) async fn handle_join_from_unknown(
         &self,
         join: Join,
         locator: &Locator,
         batch_size: BatchSize,
     ) -> ZResult<()> {
-        if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
+        if zasyncread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             tracing::debug!(
                 "Ignoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
@@ -136,10 +136,10 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        self.new_peer(locator, join)
+        self.new_peer(locator, join).await
     }
 
-    fn handle_frame(&self, frame: Frame, peer: &TransportMulticastPeer) -> ZResult<()> {
+    async fn handle_frame(&self, frame: Frame, peer: &TransportMulticastPeer) -> ZResult<()> {
         let Frame {
             reliability,
             sn,
@@ -162,8 +162,8 @@ impl TransportMulticastInner {
         };
 
         let mut guard = match reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zasynclock!(c.reliable),
+            Reliability::BestEffort => zasynclock!(c.best_effort),
         };
 
         if !self.verify_sn(sn, &mut guard)? {
@@ -177,7 +177,11 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    fn handle_fragment(&self, fragment: Fragment, peer: &TransportMulticastPeer) -> ZResult<()> {
+    async fn handle_fragment(
+        &self,
+        fragment: Fragment,
+        peer: &TransportMulticastPeer,
+    ) -> ZResult<()> {
         let Fragment {
             reliability,
             more,
@@ -201,8 +205,8 @@ impl TransportMulticastInner {
         };
 
         let mut guard = match reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zasynclock!(c.reliable),
+            Reliability::BestEffort => zasynclock!(c.best_effort),
         };
 
         if !self.verify_sn(sn, &mut guard)? {
@@ -237,7 +241,7 @@ impl TransportMulticastInner {
     fn verify_sn(
         &self,
         sn: TransportSn,
-        guard: &mut MutexGuard<'_, TransportChannelRx>,
+        guard: &mut AsyncMutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
@@ -257,7 +261,7 @@ impl TransportMulticastInner {
         Ok(true)
     }
 
-    pub(super) fn read_messages(
+    pub(super) async fn read_messages(
         &self,
         mut batch: RBatch,
         locator: Locator,
@@ -276,20 +280,20 @@ impl TransportMulticastInner {
                 transport.stats.inc_rx_t_msgs(1);
             }
 
-            let r_guard = zread!(self.peers);
+            let r_guard = zasyncread!(self.peers);
             match r_guard.get(&locator) {
                 Some(peer) => {
                     peer.set_active();
                     match msg.body {
-                        TransportBody::Frame(msg) => self.handle_frame(msg, peer)?,
+                        TransportBody::Frame(msg) => self.handle_frame(msg, peer).await?,
                         TransportBody::Fragment(fragment) => {
-                            self.handle_fragment(fragment, peer)?
+                            self.handle_fragment(fragment, peer).await?
                         }
                         TransportBody::Join(join) => self.handle_join_from_peer(join, peer)?,
                         TransportBody::KeepAlive(KeepAlive { .. }) => {}
                         TransportBody::Close(Close { reason, .. }) => {
                             drop(r_guard);
-                            self.del_peer(&locator, reason)?;
+                            self.del_peer(&locator, reason).await?;
                         }
                         _ => {
                             tracing::debug!(
@@ -303,7 +307,8 @@ impl TransportMulticastInner {
                 None => {
                     drop(r_guard);
                     if let TransportBody::Join(join) = msg.body {
-                        self.handle_join_from_unknown(join, &locator, batch_size)?;
+                        self.handle_join_from_unknown(join, &locator, batch_size)
+                            .await?;
                     }
                 }
             }

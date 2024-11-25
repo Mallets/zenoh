@@ -265,7 +265,7 @@ mod tests {
             }
             .into();
 
-            peer_shm02_transport.schedule(message).unwrap();
+            peer_shm02_transport.schedule(message).await.unwrap();
         }
 
         // Wait a little bit
@@ -306,7 +306,7 @@ mod tests {
             }
             .into();
 
-            peer_net01_transport.schedule(message).unwrap();
+            peer_net01_transport.schedule(message).await.unwrap();
         }
 
         // Wait a little bit

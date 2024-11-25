@@ -69,7 +69,7 @@ pub(crate) struct TransportUnicastUniversal {
 }
 
 impl TransportUnicastUniversal {
-    pub fn make(
+    pub async fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
@@ -93,7 +93,7 @@ impl TransportUnicastUniversal {
             best_effort: config.tx_initial_sn,
         };
         for c in priority_tx.iter() {
-            c.sync(initial_sn)?;
+            c.sync(initial_sn).await?;
         }
 
         #[cfg(feature = "stats")]
@@ -222,7 +222,7 @@ impl TransportUnicastUniversal {
             best_effort: initial_sn_rx,
         };
         for c in self.priority_rx.iter() {
-            c.sync(csn)?;
+            c.sync(csn).await?;
         }
 
         Ok(())
@@ -371,7 +371,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
             .into();
 
-            p.push_transport_message(msg, Priority::Background);
+            p.push_transport_message(msg, Priority::Background).await;
         }
         // Terminate and clean up the transport
         self.delete().await
@@ -397,8 +397,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
-        match self.internal_schedule(msg) {
+    async fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+        match self.internal_schedule(msg).await {
             true => Ok(()),
             false => bail!("error scheduling message!"),
         }

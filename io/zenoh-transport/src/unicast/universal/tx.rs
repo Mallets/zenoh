@@ -68,51 +68,54 @@ impl TransportUnicastUniversal {
         match_.full.or(match_.partial).or(match_.any)
     }
 
-    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
-        let transport_links = self
-            .links
-            .read()
-            .expect("reading `TransportUnicastUniversal::links` should not fail");
+    async fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
+        let pipeline = {
+            let transport_links = self
+                .links
+                .read()
+                .expect("reading `TransportUnicastUniversal::links` should not fail");
 
-        let Some(transport_link_index) = Self::select(
-            transport_links.iter().map(|tl| {
-                (
-                    tl.link
-                        .config
-                        .reliability
-                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
-                    tl.link.config.priorities.clone(),
-                )
-            }),
-            Reliability::from(msg.is_reliable()),
-            msg.priority(),
-        ) else {
+            let Some(transport_link_index) = Self::select(
+                transport_links.iter().map(|tl| {
+                    (
+                        tl.link
+                            .config
+                            .reliability
+                            .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
+                        tl.link.config.priorities.clone(),
+                    )
+                }),
+                Reliability::from(msg.is_reliable()),
+                msg.priority(),
+            ) else {
+                tracing::trace!(
+                    "Message dropped because the transport has no links: {}",
+                    msg
+                );
+
+                // No Link found
+                return false;
+            };
+
+            let transport_link = transport_links
+                .get(transport_link_index)
+                .expect("transport link index should be valid");
+
+            let pipeline = transport_link.pipeline.clone();
             tracing::trace!(
-                "Message dropped because the transport has no links: {}",
-                msg
+                "Scheduled {:?} for transmission to {} ({})",
+                msg,
+                transport_link.link.link.get_dst(),
+                self.get_zid()
             );
-
-            // No Link found
-            return false;
+            // Drop the guard before the push_zenoh_message since
+            // the link could be congested and this operation could
+            // block for fairly long time
+            // drop(transport_links);
+            pipeline
         };
-
-        let transport_link = transport_links
-            .get(transport_link_index)
-            .expect("transport link index should be valid");
-
-        let pipeline = transport_link.pipeline.clone();
-        tracing::trace!(
-            "Scheduled {:?} for transmission to {} ({})",
-            msg,
-            transport_link.link.link.get_dst(),
-            self.get_zid()
-        );
-        // Drop the guard before the push_zenoh_message since
-        // the link could be congested and this operation could
-        // block for fairly long time
-        drop(transport_links);
         let droppable = msg.is_droppable();
-        let push = pipeline.push_network_message(msg);
+        let push = pipeline.push_network_message(msg).await;
         if !push && !droppable {
             tracing::error!(
                 "Unable to push non droppable network message to {}. Closing transport!",
@@ -137,7 +140,7 @@ impl TransportUnicastUniversal {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> bool {
+    pub(crate) async fn internal_schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
@@ -146,7 +149,7 @@ impl TransportUnicastUniversal {
             }
         }
 
-        let res = self.schedule_on_link(msg);
+        let res = self.schedule_on_link(msg).await;
 
         #[cfg(feature = "stats")]
         if res {

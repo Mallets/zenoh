@@ -15,13 +15,14 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, RwLock,
+        Arc,
     },
     time::Duration,
 };
 
+use tokio::sync::RwLock as AsyncRwLock;
 use tokio_util::sync::CancellationToken;
-use zenoh_core::{zcondfeat, zread, zwrite};
+use zenoh_core::{zasyncread, zasyncwrite, zcondfeat};
 use zenoh_link::{Link, Locator};
 use zenoh_protocol::{
     core::{Bits, Field, Priority, Resolution, WhatAmI, ZenohIdProto},
@@ -80,13 +81,13 @@ pub(crate) struct TransportMulticastInner {
     // Tx priorities
     pub(super) priority_tx: Arc<[TransportPriorityTx]>,
     // Remote peers
-    pub(super) peers: Arc<RwLock<HashMap<Locator, TransportMulticastPeer>>>,
+    pub(super) peers: Arc<AsyncRwLock<HashMap<Locator, TransportMulticastPeer>>>,
     // The multicast locator - Convenience for logging
     pub(super) locator: Locator,
     // The multicast link
-    pub(super) link: Arc<RwLock<Option<TransportLinkMulticastUniversal>>>,
+    pub(super) link: Arc<AsyncRwLock<Option<TransportLinkMulticastUniversal>>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
+    pub(super) callback: Arc<AsyncRwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
     // Task controller for safe task cancellation
     task_controller: TaskController,
     // Transport statistics
@@ -97,7 +98,7 @@ pub(crate) struct TransportMulticastInner {
 }
 
 impl TransportMulticastInner {
-    pub(super) fn make(
+    pub(super) async fn make(
         manager: TransportManager,
         config: TransportConfigMulticast,
     ) -> ZResult<TransportMulticastInner> {
@@ -105,7 +106,7 @@ impl TransportMulticastInner {
         if (config.initial_sns.len() != 1) != (config.initial_sns.len() != Priority::NUM) {
             for sn in config.initial_sns.iter() {
                 let tct = TransportPriorityTx::make(config.sn_resolution)?;
-                tct.sync(*sn)?;
+                tct.sync(*sn).await?;
                 priority_tx.push(tct);
             }
         } else {
@@ -124,10 +125,10 @@ impl TransportMulticastInner {
         let ti = TransportMulticastInner {
             manager,
             priority_tx: priority_tx.into_boxed_slice().into(),
-            peers: Arc::new(RwLock::new(HashMap::new())),
+            peers: Arc::new(AsyncRwLock::new(HashMap::new())),
             locator: config.link.link.get_dst().to_owned(),
-            link: Arc::new(RwLock::new(None)),
-            callback: Arc::new(RwLock::new(None)),
+            link: Arc::new(AsyncRwLock::new(None)),
+            callback: Arc::new(AsyncRwLock::new(None)),
             task_controller: TaskController::default(),
             #[cfg(feature = "stats")]
             stats,
@@ -136,15 +137,15 @@ impl TransportMulticastInner {
         };
 
         let link = TransportLinkMulticastUniversal::new(ti.clone(), config.link);
-        let mut guard = zwrite!(ti.link);
+        let mut guard = zasyncwrite!(ti.link);
         *guard = Some(link);
         drop(guard);
 
         Ok(ti)
     }
 
-    pub(super) fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
-        let mut guard = zwrite!(self.callback);
+    pub(super) async fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
+        let mut guard = zasyncwrite!(self.callback);
         *guard = Some(callback);
     }
 
@@ -164,12 +165,12 @@ impl TransportMulticastInner {
         self.manager.config.multicast.is_shm
     }
 
-    pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
-        zread!(self.callback).clone()
+    pub(crate) async fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
+        zasyncread!(self.callback).clone()
     }
 
-    pub(crate) fn get_link(&self) -> TransportLinkMulticast {
-        zread!(self.link).as_ref().unwrap().link.clone()
+    pub(crate) async fn get_link(&self) -> TransportLinkMulticast {
+        zasyncread!(self.link).as_ref().unwrap().link.clone()
     }
 
     /*************************************/
@@ -178,13 +179,13 @@ impl TransportMulticastInner {
     pub(super) async fn delete(&self) -> ZResult<()> {
         tracing::debug!("Closing multicast transport on {:?}", self.locator);
 
-        let callback = zwrite!(self.callback).take();
+        let callback = zasyncwrite!(self.callback).take();
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_multicast(&self.locator).await;
 
         // Close all the links
-        let mut link = zwrite!(self.link).take();
+        let mut link = zasyncwrite!(self.link).take();
         if let Some(l) = link.take() {
             let _ = l.close().await;
         }
@@ -209,7 +210,7 @@ impl TransportMulticastInner {
         );
 
         {
-            let r_guard = zread!(self.link);
+            let r_guard = zasyncread!(self.link);
             if let Some(link) = r_guard.as_ref() {
                 if let Some(pipeline) = link.pipeline.as_ref() {
                     let pipeline = pipeline.clone();
@@ -220,7 +221,9 @@ impl TransportMulticastInner {
                         session: false,
                     }
                     .into();
-                    pipeline.push_transport_message(msg, Priority::Background);
+                    pipeline
+                        .push_transport_message(msg, Priority::Background)
+                        .await;
                 }
             }
         }
@@ -232,8 +235,8 @@ impl TransportMulticastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn start_tx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+    pub(super) async fn start_tx(&self) -> ZResult<()> {
+        let mut guard = zasyncwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
                 // For cross-system compatibility reasons we set the default minimal
@@ -266,11 +269,11 @@ impl TransportMulticastInner {
         }
     }
 
-    pub(super) fn stop_tx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+    pub(super) async fn stop_tx(&self) -> ZResult<()> {
+        let mut guard = zasyncwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                l.stop_tx();
+                l.stop_tx().await;
                 Ok(())
             }
             None => {
@@ -283,8 +286,8 @@ impl TransportMulticastInner {
         }
     }
 
-    pub(super) fn start_rx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+    pub(super) async fn start_rx(&self) -> ZResult<()> {
+        let mut guard = zasyncwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
                 // For cross-system compatibility reasons we set the default minimal
@@ -308,8 +311,8 @@ impl TransportMulticastInner {
         }
     }
 
-    pub(super) fn stop_rx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+    pub(super) async fn stop_rx(&self) -> ZResult<()> {
+        let mut guard = zasyncwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
                 l.stop_rx();
@@ -328,8 +331,8 @@ impl TransportMulticastInner {
     /*************************************/
     /*               PEER                */
     /*************************************/
-    pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
-        let mut link = Link::new_multicast(&self.get_link().link);
+    pub(super) async fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
+        let mut link = Link::new_multicast(&self.get_link().await.link);
         link.dst = locator.clone();
 
         let is_shm = zcondfeat!("shared-memory", join.ext_shm.is_some(), false);
@@ -342,7 +345,7 @@ impl TransportMulticastInner {
             links: vec![link],
         };
 
-        let handler = match zread!(self.callback).as_ref() {
+        let handler = match zasyncread!(self.callback).as_ref() {
             Some(cb) => cb.new_peer(peer.clone())?,
             None => return Ok(()),
         };
@@ -360,7 +363,7 @@ impl TransportMulticastInner {
                 join.resolution.get(Field::FrameSN),
                 self.manager.config.defrag_buff_size,
             )?;
-            tprx.sync(*sn)?;
+            tprx.sync(*sn).await?;
             priority_rx.push(tprx);
         }
         let priority_rx = priority_rx.into_boxed_slice();
@@ -398,7 +401,7 @@ impl TransportMulticastInner {
                     _ = c_token.cancelled() => break
                 }
             }
-            let _ = c_self.del_peer(&c_locator, close::reason::EXPIRED);
+            let _ = c_self.del_peer(&c_locator, close::reason::EXPIRED).await;
         };
 
         self.task_controller
@@ -418,13 +421,13 @@ impl TransportMulticastInner {
             priority_rx,
             handler,
         };
-        zwrite!(self.peers).insert(locator.clone(), peer);
+        zasyncwrite!(self.peers).insert(locator.clone(), peer);
 
         Ok(())
     }
 
-    pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
-        let mut guard = zwrite!(self.peers);
+    pub(super) async fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
+        let mut guard = zasyncwrite!(self.peers);
         if let Some(peer) = guard.remove(locator) {
             tracing::debug!(
                 "Peer {}/{}/{} has left multicast {} with reason: {}",
@@ -443,22 +446,23 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn get_peers(&self) -> Vec<TransportPeer> {
-        zread!(self.peers)
-            .values()
-            .map(|p| {
-                let mut link = Link::new_multicast(&self.get_link().link);
-                link.dst = p.locator.clone();
+    pub(super) async fn get_peers(&self) -> Vec<TransportPeer> {
+        let ps = zasyncread!(self.peers);
 
-                TransportPeer {
-                    zid: p.zid,
-                    whatami: p.whatami,
-                    is_qos: p.is_qos(),
-                    #[cfg(feature = "shared-memory")]
-                    is_shm: self.is_shm(),
-                    links: vec![link],
-                }
+        let mut vs = Vec::new();
+        for p in ps.values() {
+            let mut link = Link::new_multicast(&self.get_link().await.link);
+            link.dst = p.locator.clone();
+
+            vs.push(TransportPeer {
+                zid: p.zid,
+                whatami: p.whatami,
+                is_qos: p.is_qos(),
+                #[cfg(feature = "shared-memory")]
+                is_shm: self.is_shm(),
+                links: vec![link],
             })
-            .collect()
+        }
+        vs
     }
 }

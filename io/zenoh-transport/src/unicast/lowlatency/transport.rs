@@ -227,8 +227,8 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
-        self.internal_schedule(msg)
+    async fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+        self.internal_schedule(msg).await
     }
 
     /*************************************/

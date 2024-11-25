@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_core::zread;
+use zenoh_core::zasyncread;
 use zenoh_protocol::network::NetworkMessage;
 
 use super::transport::TransportMulticastInner;
@@ -20,7 +20,7 @@ use crate::shm::map_zmsg_to_partner;
 
 //noinspection ALL
 impl TransportMulticastInner {
-    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
+    async fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {
                 // Drop the guard before the push_zenoh_message since
@@ -28,11 +28,11 @@ impl TransportMulticastInner {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                return pl.push_network_message($msg);
+                return pl.push_network_message($msg).await;
             };
         }
 
-        let guard = zread!(self.link);
+        let guard = zasyncread!(self.link);
         match guard.as_ref() {
             Some(l) => {
                 if let Some(pl) = l.pipeline.as_ref() {
@@ -53,7 +53,7 @@ impl TransportMulticastInner {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(super) fn schedule(&self, mut msg: NetworkMessage) -> bool {
+    pub(super) async fn schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.shm) {
@@ -62,7 +62,7 @@ impl TransportMulticastInner {
             }
         }
 
-        let res = self.schedule_on_link(msg);
+        let res = self.schedule_on_link(msg).await;
 
         #[cfg(feature = "stats")]
         if res {
